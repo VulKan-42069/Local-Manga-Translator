@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Manga Translator</title>
+    <!-- Modern geometric font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Main Top Navigation / Toolbar -->
+        <header class="app-header">
+            <div class="header-logo">
+                <span class="logo-text">LOCAL MANGA <span class="logo-accent">TRANSLATOR</span></span>
+            </div>
+            
+            <div class="header-controls">
+                <!-- File Picker Triggers -->
+                <button id="btn-load-file" class="btn btn-secondary shadow-btn">LOAD FILE</button>
+                <button id="btn-load-folder" class="btn btn-secondary shadow-btn">LOAD FOLDER</button>
+
+                <div class="divider"></div>
+
+                <!-- Language Dropdown -->
+                <div class="control-group">
+                    <label for="select-target-lang">TARGET LANG:</label>
+                    <select id="select-target-lang" class="custom-select">
+                        <option value="English">ENGLISH</option>
+                        <option value="Malay">MALAY</option>
+                    </select>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- View Mode Selector -->
+                <div class="view-mode-selector">
+                    <button id="mode-original" class="btn-toggle">ORIGINAL</button>
+                    <button id="mode-translated" class="btn-toggle active">TRANSLATED</button>
+                    <button id="mode-split" class="btn-toggle">SIDE-BY-SIDE</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Run Diagnostics -->
+                <button id="btn-diagnostics" class="btn btn-warning shadow-btn">DIAGNOSTICS</button>
+                <!-- Auto Translate -->
+                <button id="btn-auto-translate" class="btn btn-primary shadow-btn" style="background-color: #800830;">AUTO TRANSLATE</button>
+                <!-- Export trigger -->
+                <button id="btn-export" class="btn btn-primary shadow-btn">EXPORT CURRENT</button>
+            </div>
+        </header>
+
+        <!-- Main Workspace Area -->
+        <main class="app-workspace">
+            <!-- Left Sidebar: Pages & Files List -->
+            <aside class="sidebar-left">
+                <div class="sidebar-header">
+                    <h3>PAGES</h3>
+                    <span id="page-count-badge" class="badge">0</span>
+                </div>
+                <div class="page-list-container">
+                    <ul id="page-list" class="page-list">
+                        <!-- Populated by JS -->
+                        <div class="empty-state">No files loaded. Load a PDF or folder of images.</div>
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- Center Viewport: Interactive Canvas Reader -->
+            <section class="viewport-container">
+                <!-- Loading indicator overlay -->
+                <div id="loading-overlay" class="loading-overlay hidden">
+                    <div class="spinner"></div>
+                    <p id="loading-text">Processing document...</p>
+                </div>
+
+                <div id="viewport" class="viewport">
+                    <!-- Split panels container -->
+                    <div id="canvas-container" class="canvas-container mode-translated-only">
+                        <!-- Left Panel: Original Page (visible in Split/Original) -->
+                        <div id="panel-original" class="canvas-panel">
+                            <div class="panel-tag">ORIGINAL JAPANESE</div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-original"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Translated/Interactive (visible in Split/Translated) -->
+                        <div id="panel-translated" class="canvas-panel">
+                            <div class="panel-tag tag-accent">TRANSLATED PAGE</div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-translated"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Viewport HUD Overlay (Zoom levels, tool tips) -->
+                <div class="viewport-hud">
+                    <span id="hud-zoom">100%</span>
+                    <span class="hud-sep">|</span>
+                    <span>Hold Spacebar + Drag to Pan</span>
+                    <span class="hud-sep">|</span>
+                    <span>Click + Drag to Draw Bubble Box</span>
+                    <button id="btn-zoom-fit" class="btn-icon" title="Fit Screen">⛶</button>
+                </div>
+            </section>
+
+            <!-- Right Sidebar: Controls, OCR, Typesetting, Settings -->
+            <aside class="sidebar-right">
+                <!-- Tabs headers -->
+                <div class="tab-headers">
+                    <button id="tab-editor-btn" class="tab-btn active">EDITOR</button>
+                    <button id="tab-settings-btn" class="tab-btn">SETTINGS</button>
+                </div>
+
+                <!-- Tab Contents: Editor -->
+                <div id="tab-editor" class="tab-content active">
+                    <div class="section-container">
+                        <h4>ACTIVE SPEECH BUBBLE</h4>
+                        
+                        <div id="no-bubble-selected" class="empty-state-info">
+                            Click or draw a box on the translated canvas to select a bubble and translate it.
+                        </div>
+
+                        <div id="bubble-editor-controls" class="hidden">
+                            <!-- Translation Button -->
+                            <button id="btn-run-translation" class="btn btn-primary btn-block shadow-btn">TRANSLATE WITH GEMMA 4</button>
+
+                            <div class="form-group margin-top">
+                                <label>JAPANESE TRANSCRIPTION (OCR):</label>
+                                <textarea id="txt-ocr" class="form-textarea" placeholder="OCR text will appear here..."></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label>TRANSLATION TEXT:</label>
+                                <textarea id="txt-translation" class="form-textarea" placeholder="Translation will appear here..."></textarea>
+                            </div>
+
+                            <div class="form-group-row">
+                                <button id="btn-apply-text" class="btn btn-secondary btn-half shadow-btn">APPLY TEXT</button>
+                                <button id="btn-delete-bubble" class="btn btn-danger btn-half shadow-btn">DELETE</button>
+                            </div>
+
+                            <hr class="sharp-hr"/>
+
+                            <h4>MASKING (WHITE-OUT)</h4>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>SHAPE</label>
+                                    <select id="select-mask-shape" class="custom-select">
+                                        <option value="Rectangle" selected>RECTANGLE</option>
+                                        <option value="Ellipse">ELLIPSE</option>
+                                        <option value="None">NONE (NO MASK)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>MASK COLOR</label>
+                                    <div class="color-picker-wrapper">
+                                        <input type="color" id="picker-mask-color" value="#ffffff">
+                                        <input type="text" id="txt-mask-color" value="#ffffff" maxlength="7">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>MASK OPACITY: <span id="label-mask-opacity">1.0</span></label>
+                                <input type="range" id="slider-mask-opacity" min="0" max="1" step="0.05" value="1">
+                            </div>
+
+                            <hr class="sharp-hr"/>
+
+                            <h4>TYPESETTING</h4>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>FONT FAMILY</label>
+                                    <select id="select-font-family" class="custom-select">
+                                        <option value="Comic Neue">COMIC NEUE (LOCAL)</option>
+                                        <option value="Arial">ARIAL</option>
+                                        <option value="Impact">IMPACT</option>
+                                        <option value="Times New Roman">TIMES</option>
+                                        <option value="custom">CUSTOM NAME...</option>
+                                    </select>
+                                    <input type="text" id="txt-custom-font" class="form-input margin-top hidden" placeholder="Enter font name...">
+                                </div>
+                                <div class="form-group">
+                                    <label>FONT SIZE (PX)</label>
+                                    <input type="number" id="num-font-size" class="form-input" min="6" max="120" value="40">
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>TEXT COLOR</label>
+                                    <div class="color-picker-wrapper">
+                                        <input type="color" id="picker-text-color" value="#000000">
+                                        <input type="text" id="txt-text-color" value="#000000" maxlength="7">
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>LINE HEIGHT</label>
+                                    <input type="number" id="num-line-height" class="form-input" min="0.5" max="3" step="0.1" value="1.2">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>ALIGNMENT</label>
+                                <div class="align-selector">
+                                    <button id="align-left" class="btn-align">LEFT</button>
+                                    <button id="align-center" class="btn-align active">CENTER</button>
+                                    <button id="align-right" class="btn-align">RIGHT</button>
+                                </div>
+                            </div>
+
+                            <div class="form-group-row">
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="chk-bold" checked> BOLD
+                                </label>
+                                <label class="checkbox-container">
+                                    <input type="checkbox" id="chk-italic"> ITALIC
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab Contents: Settings -->
+                <div id="tab-settings" class="tab-content">
+                    <div class="section-container">
+                        <h4>OLLAMA CONFIGURATION</h4>
+                        
+                        <div class="form-group">
+                            <label>OLLAMA URL</label>
+                            <input type="text" id="setting-ollama-url" class="form-input" value="http://localhost:11434">
+                        </div>
+
+                        <div class="form-group">
+                            <label>MODEL NAME</label>
+                            <input type="text" id="setting-model-name" class="form-input" value="gemma4:12b-it-qat">
+                        </div>
+
+                        <div class="form-group">
+                            <label>TEMPERATURE</label>
+                            <input type="range" id="setting-temperature" min="0" max="1" step="0.1" value="0.3">
+                            <span id="label-temperature">0.3</span>
+                        </div>
+
+                        <hr class="sharp-hr"/>
+
+                        <h4>VLM TRANSLATION SYSTEM PROMPT</h4>
+                        <div class="form-group">
+                            <label>PROMPT TEMPLATE</label>
+                            <textarea id="setting-system-prompt" class="form-textarea prompt-textarea">You are a professional Japanese to [TargetLanguage] Manga Translator. Analyze the provided image of a manga speech bubble containing Japanese text.
+First, transcribe the exact Japanese text (maintaining correct vertical/horizontal reading order).
+Second, translate the transcribed text into natural, colloquial [TargetLanguage] that fits standard manga dialogue style.
+Ensure it sounds natural for a comic book format.
+Response format must be exactly this JSON:
+{
+  "japanese": "transcribed Japanese text",
+  "translation": "translated text in [TargetLanguage]"
+}</textarea>
+                        </div>
+                        
+                        <hr class="sharp-hr"/>
+                        
+                        <div class="ollama-server-status">
+                            <span class="status-label">Ollama Server:</span>
+                            <div class="status-indicator-wrapper">
+                                <span id="ollama-status-dot" class="status-dot status-offline"></span>
+                                <span id="ollama-status-text">OFFLINE</span>
+                            </div>
+                            <button id="btn-start-ollama" class="btn btn-secondary margin-top hidden">START OLLAMA SERVER</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Diagnostics Results Dialog (Modal) -->
+        <div id="diagnostics-modal" class="modal-overlay hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h2>SYSTEM DIAGNOSTICS & SELF-TEST REPORT</h2>
+                    <button id="btn-close-diagnostics" class="btn-close">×</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-desc">Runs internal tests to verify the native wrapper, Ollama server, model registration, and PDF capabilities.</p>
+                    
+                    <button id="btn-run-tests" class="btn btn-primary shadow-btn">RUN HEALTH CHECK</button>
+                    
+                    <div class="test-results-container margin-top">
+                        <!-- Test Items -->
+                        <div class="test-item" id="test-ollama">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Ollama API Connectivity</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+
+                        <div class="test-item" id="test-model">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Gemma 4 12B IT QaT Model Registration</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+
+                        <div class="test-item" id="test-vlm">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Local VLM Model Inference / Response Speed</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+
+                        <div class="test-item" id="test-pdf">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Windows Native PDF Rendering Capabilities</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+
+                        <div class="test-item" id="test-ocr">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Windows Native Japanese OCR Engine Support</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+
+                        <div class="test-item" id="test-disk">
+                            <div class="test-meta">
+                                <span class="test-status status-pending">PENDING</span>
+                                <span class="test-title">Autosave File Read/Write Permissions</span>
+                            </div>
+                            <p class="test-error hidden"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Alert Modal -->
+    <div id="custom-alert" class="custom-alert-overlay hidden">
+        <div class="custom-alert-card">
+            <div class="custom-alert-header">
+                <span class="custom-alert-title">MESSAGE</span>
+                <button id="btn-close-alert" class="btn-close">×</button>
+            </div>
+            <div class="custom-alert-body">
+                <p id="custom-alert-message">Alert message goes here.</p>
+                <div class="custom-alert-footer">
+                    <button id="btn-alert-ok" class="btn btn-primary shadow-btn" style="width: 100px;">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Javascript Code -->
+    <script src="index.js"></script>
+</body>
+</html>
